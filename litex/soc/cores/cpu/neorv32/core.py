@@ -13,7 +13,7 @@ from litex.gen import *
 
 from litex.build.vhd2v_converter import *
 
-from litex.soc.interconnect import wishbone
+from litex.soc.interconnect import wishbone, csr
 from litex.soc.cores.cpu import CPU, CPU_GCC_TRIPLE_RISCV32
 
 # Variants -----------------------------------------------------------------------------------------
@@ -71,15 +71,26 @@ class NEORV32(CPU):
         return flags
 
     def __init__(self, platform, variant="standard"):
-        self.platform     = platform
-        self.variant      = variant
-        self.human_name   = f"NEORV32-{variant}"
-        self.reset        = Signal()
-        self.ibus         = idbus = wishbone.Interface()
-        self.periph_buses = [idbus] # Peripheral buses (Connected to main SoC's bus).
-        self.memory_buses = []      # Memory buses (Connected directly to LiteDRAM).
+        self.platform          = platform
+        self.variant           = variant
+        self.human_name        = f"NEORV32-{variant}"
+        self.reset             = Signal()
+        self.ibus              = idbus = wishbone.Interface()
+        self.periph_buses      = [idbus] # Peripheral buses (Connected to main SoC's bus).
+        self.memory_buses      = []      # Memory buses (Connected directly to LiteDRAM).
+        self.interrupt         = Signal(32)
+        self.interrupt_pending = csr.CSRStatus(32)
+        self.interrupt_enable  = csr.CSRStorage(32)
+        self.interrupt_masked  = Signal(32)
+        self.interrupt_mext    = Signal()
 
         # # #
+
+        self.comb += [
+            self.interrupt_masked.eq(self.interrupt & self.interrupt_enable.storage),
+            self.interrupt_pending.status.eq(self.interrupt),
+            self.interrupt_mext.eq(Reduce("OR", self.interrupt_masked)),
+        ]
 
         # CPU Instance.
         self.cpu_params = dict(
@@ -95,7 +106,7 @@ class NEORV32(CPU):
             i_jtag_tms_i  = 0,
 
             # Interrupt.
-            i_mext_irq_i  = 0,
+            i_mext_irq_i  = self.interrupt_mext,
 
             # I/D Wishbone Bus.
             o_wb_adr_o = Cat(Signal(2), idbus.adr),

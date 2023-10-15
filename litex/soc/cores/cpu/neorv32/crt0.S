@@ -1,11 +1,16 @@
 #define MIE_MEIE 	0x800
 
+	.balign 4
 	.global _start
 _start:
 	j reset_vector
 
 reset_vector:
+	csrrwi zero, mstatus, 0 // clear mstatus; disable machine-level interrupts
+	csrw mie, zero
+
 	la sp, _fstack
+	// Disable interrupts before setting mtvec
 	la t0, trap_vector
 	csrw mtvec, t0
 
@@ -36,6 +41,7 @@ reset_vector:
 	call main
 1:	j 1b
 
+	.balign 4
 trap_vector:
 	addi sp, sp, -16*4
 	sw ra,  0*4(sp)
